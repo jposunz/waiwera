@@ -163,7 +163,7 @@ contains
     PetscInt, intent(out) :: depth
     type(dm_stratum_type), allocatable, intent(out) :: strata(:)
     ! Locals:
-    PetscInt :: h, dummy
+    PetscInt :: h, dummy, end_interior_cell
     PetscErrorCode :: ierr
 
     call DMPlexGetDepth(dm, depth, ierr); CHKERRQ(ierr)
@@ -172,15 +172,14 @@ contains
     do h = 0, depth
        call DMPlexGetHeightStratum(dm, h, strata(h)%start, &
             strata(h)%end, ierr); CHKERRQ(ierr)
+       strata(h)%end_interior = strata(h)%end
     end do
 
-    call DMPlexGetGhostCellStratum(dm, strata(0)%end_interior, &
+    call DMPlexGetGhostCellStratum(dm, end_interior_cell, &
          dummy, ierr); CHKERRQ(ierr)
-    do h = 0, depth
-       if (strata(h)%end_interior < 0) then
-          strata(h)%end_interior = strata(h)%end
-       end if
-    end do
+    if (end_interior_cell >= 0) then
+       strata(0)%end_interior = end_interior_cell
+    end if
 
   end subroutine dm_get_strata
 
