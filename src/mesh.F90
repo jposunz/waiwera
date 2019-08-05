@@ -1716,9 +1716,9 @@ contains
     DM :: minc_dm
     PetscInt :: start_chart, end_chart, m
     PetscInt :: dim
-    PetscInt :: num_minc_cells
+    PetscInt :: num_minc_cells, minc_end_interior_cell
     PetscInt :: num_minc_zones, num_cells, num_new_points, max_num_levels
-    PetscInt, allocatable :: minc_zone(:), minc_end_interior(:)
+    PetscInt, allocatable :: minc_zone(:)
     PetscInt, allocatable :: stratum_shift(:)
     type(list_type), allocatable :: minc_level_cells(:)
     PetscErrorCode :: ierr
@@ -1747,13 +1747,10 @@ contains
     call self%setup_minc_dm_strata_shifts(num_minc_cells, &
          max_num_levels, minc_level_cells, stratum_shift)
 
-    allocate(minc_end_interior(0: self%depth))
-    minc_end_interior = self%strata%end_interior + &
-         (stratum_shift + 1) * num_minc_cells
-    call DMPlexSetHybridBounds(minc_dm, minc_end_interior(0), &
-         minc_end_interior(1), minc_end_interior(self%depth - 1), &
-         minc_end_interior(self%depth), ierr); CHKERRQ(ierr)
-    deallocate(minc_end_interior)
+    minc_end_interior_cell = self%strata(0)%end_interior + &
+         (stratum_shift(0) + 1) * num_minc_cells
+    call DMPlexSetGhostCellStratum(minc_dm, minc_end_interior_cell, -1, &
+         ierr); CHKERRQ(ierr)
     self%strata%num_minc_points = num_minc_cells
 
     call self%set_minc_dm_cone_sizes(minc_dm, num_cells, num_minc_cells, &
