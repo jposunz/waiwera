@@ -86,7 +86,7 @@ module mesh_module
      procedure :: label_cell_array_rock_types => mesh_label_cell_array_rock_types
      procedure :: label_cell_array_zones => mesh_label_cell_array_zones
      procedure :: label_cell_array_minc_zones => mesh_label_cell_array_minc_zones
-     procedure :: label_boundaries => mesh_label_boundaries
+     procedure :: label_cell_array_boundaries => mesh_label_cell_array_boundaries
      procedure :: label_sources => mesh_label_sources
      procedure :: setup_zones => mesh_setup_zones
      procedure :: setup_minc => mesh_setup_minc
@@ -795,7 +795,7 @@ contains
        call self%label_cell_array_zones(json)
        call self%label_cell_array_rock_types(json)
        call self%label_cell_array_minc_zones(json)
-       call self%label_boundaries(json, logfile)
+       call self%label_cell_array_boundaries(json, logfile)
        call self%label_sources(json)
        call self%setup_cell_natural()
        self%has_minc = PETSC_FALSE
@@ -1387,8 +1387,9 @@ contains
 
 !------------------------------------------------------------------------
 
-  subroutine mesh_label_boundaries(self, json, logfile)
-    !! Labels serial DM for boundary conditions.
+  subroutine mesh_label_cell_array_boundaries(self, json, logfile)
+    !! Labels serial DM for boundary conditions defined by cell lists
+    !! and a normal vector.
 
     use kinds_module
     use fson
@@ -1554,7 +1555,7 @@ contains
 
     end subroutine get_cell_faces
 
-  end subroutine mesh_label_boundaries
+  end subroutine mesh_label_cell_array_boundaries
 
 !------------------------------------------------------------------------
 
