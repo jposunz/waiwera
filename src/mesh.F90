@@ -1461,11 +1461,13 @@ contains
                             call fson_get_default(face_json, "cells", default_cells, cells, &
                                  logfile, log_key = trim(bdystr) // "faces.cells")
                             num_cells = size(cells)
-                            call fson_get_default(face_json, "normal", default_normal, &
-                                 input_normal, logfile, log_key = trim(bdystr) // "faces.normal")
-                            call get_cell_faces(cells, num_cells, input_normal, offset)
-                            offset = offset + num_cells
-                            deallocate(cells)
+                            if (num_cells > 0) then
+                               call fson_get_default(face_json, "normal", default_normal, &
+                                    input_normal, logfile, log_key = trim(bdystr) // "faces.normal")
+                               call get_cell_faces(cells, num_cells, input_normal, offset)
+                               offset = offset + num_cells
+                               deallocate(cells)
+                            end if
                             face_json => face_json%next
                          end do
                       case default
@@ -1479,12 +1481,14 @@ contains
                    call fson_get_default(faces_json, "cells", default_cells, cells, &
                         logfile, log_key = trim(bdystr) // "faces.cells")
                    num_cells = size(cells)
-                   call fson_get_default(faces_json, "normal", default_normal, &
-                        input_normal, logfile, log_key = trim(bdystr) // "faces.normal")
-                   num_faces = num_cells
-                   allocate(faces(num_faces))
-                   call get_cell_faces(cells, num_cells, input_normal, 0)
-                   deallocate(cells)
+                   if (num_cells > 0) then
+                      call fson_get_default(faces_json, "normal", default_normal, &
+                           input_normal, logfile, log_key = trim(bdystr) // "faces.normal")
+                      num_faces = num_cells
+                      allocate(faces(num_faces))
+                      call get_cell_faces(cells, num_cells, input_normal, 0)
+                      deallocate(cells)
+                   end if
                 case default
                    if (present(logfile)) then
                       call logfile%write(LOG_LEVEL_WARN, "input", &
