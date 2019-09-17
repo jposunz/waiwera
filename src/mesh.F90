@@ -87,6 +87,7 @@ module mesh_module
      procedure :: label_cell_array_zones => mesh_label_cell_array_zones
      procedure :: label_cell_array_minc_zones => mesh_label_cell_array_minc_zones
      procedure :: label_cell_array_boundaries => mesh_label_cell_array_boundaries
+     procedure :: label_normal_boundaries => mesh_label_normal_boundaries
      procedure :: label_sources => mesh_label_sources
      procedure :: setup_zones => mesh_setup_zones
      procedure :: setup_minc => mesh_setup_minc
@@ -847,6 +848,7 @@ contains
     end if
 
     call self%setup_ghost_arrays()
+    call self%label_normal_boundaries(json)
     
   end subroutine mesh_configure
 
@@ -1560,6 +1562,107 @@ contains
     end subroutine get_cell_faces
 
   end subroutine mesh_label_cell_array_boundaries
+
+!------------------------------------------------------------------------
+
+  subroutine mesh_label_normal_boundaries(self, json)
+    !! Label distributed DM for boundary conditions defined by a
+    !! normal vector only. All faces with normal vector whose dot
+    !! product with the specified vector is positive are labelled.
+
+    use fson
+    use fson_value_m, only : fson_value_count, TYPE_ARRAY, TYPE_OBJECT
+    use fson_mpi_module
+    use face_module, only: face_type
+    use dm_utils_module, only: local_vec_section, section_offset
+
+    class(mesh_type), intent(in out) :: self
+    type(fson_value), pointer, intent(in) :: json
+    ! Locals:
+    type(fson_value), pointer :: boundaries_json, bdy_json, faces_json
+    PetscInt :: num_boundaries, ibdy
+    PetscInt :: faces_type
+    PetscInt :: start_face, end_face
+    PetscReal, allocatable :: input_normal(:)
+    character(len=64) :: bdystr
+    character(len=12) :: istr
+    PetscSection :: face_section
+    PetscReal, contiguous, pointer :: face_geom_array(:)
+    type(face_type) :: face
+    PetscErrorCode :: ierr
+
+    if (fson_has_mpi(json, "boundaries")) then
+
+       call DMPlexGetHeightStratum(self%dm, 1, start_face, end_face, ierr)
+       CHKERRQ(ierr)
+       call local_vec_section(self%face_geom, face_section)
+       call VecGetArrayF90(self%face_geom, face_geom_array, ierr); CHKERRQ(ierr)
+       call face%init()
+
+       call fson_get_mpi(json, "boundaries", boundaries_json)
+       num_boundaries = fson_value_count_mpi(boundaries_json, ".")
+       bdy_json => fson_value_children_mpi(boundaries_json)
+
+       do ibdy = 1, num_boundaries
+          write(istr, '(i0)') ibdy - 1
+          bdystr = 'boundaries[' // trim(istr) // ']'
+          if (fson_has_mpi(bdy_json, "faces")) then
+             call fson_get_mpi(bdy_json, "faces", faces_json)
+             faces_type = fson_type_mpi(faces_json, ".")
+             select case (faces_type)
+             case (TYPE_ARRAY)
+                ! TODO
+             case (TYPE_OBJECT)
+                if (.not. fson_has_mpi(faces_json, "cells")) then
+                   if (fson_has_mpi(faces_json, "normal")) then
+                      call fson_get_mpi(faces_json, "normal", val = input_normal)
+                      call label_normal_faces(ibdy, input_normal)
+                   end if
+                end if
+             end select
+          end if
+          bdy_json => bdy_json%next
+       end do
+
+       call face%destroy()
+       call VecRestoreArrayF90(self%face_geom, face_geom_array, ierr); CHKERRQ(ierr)
+
+    end if
+
+  contains
+
+    subroutine label_normal_faces(ibdy, input_normal)
+      ! Labels faces with specified input normal.
+
+      PetscInt, intent(in) :: ibdy
+      PetscReal, intent(in) :: input_normal(:)
+      ! Locals:
+      PetscInt :: normal_len, f, num_cells, face_offset
+      PetscReal :: normal(3)
+      PetscErrorCode :: ierr
+      PetscReal, parameter :: tol = 1.e-6_dp
+
+      normal_len = size(input_normal)
+      normal = 0._dp
+      normal(1: normal_len) = input_normal
+
+      do f = start_face, end_face - 1
+         call DMPlexGetSupportSize(self%dm, f, num_cells, ierr); CHKERRQ(ierr)
+         if (num_cells == 1) then
+            face_offset = section_offset(face_section, f)
+            call face%assign_geometry(face_geom_array, face_offset)
+            call DMPlexComputeCellGeometryFVM(self%dm, f, face%area, &
+                 face%centroid, face%normal, ierr); CHKERRQ(ierr)
+            if (dot_product(normal, face%normal) > tol) then
+               call DMSetLabelValue(self%dm, open_boundary_label_name, &
+                    f, ibdy, ierr); CHKERRQ(ierr)
+            end if
+         end if
+      end do
+
+    end subroutine label_normal_faces
+
+  end subroutine mesh_label_normal_boundaries
 
 !------------------------------------------------------------------------
 

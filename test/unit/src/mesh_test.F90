@@ -20,7 +20,7 @@ module mesh_test
        test_2d_radial_geometry, test_mesh_face_permeability_direction, &
        test_setup_minc_dm, test_minc_rock, &
        test_rock_assignment, test_cell_natural_global, test_minc_cell_natural_global, &
-       test_global_to_fracture_natural, test_redistribute
+       test_global_to_fracture_natural, test_redistribute, test_normal_boundary
 
 contains
 
@@ -1894,6 +1894,57 @@ contains
     end subroutine redistribute_test
 
   end subroutine test_redistribute
+
+!------------------------------------------------------------------------
+
+  subroutine test_normal_boundary(test)
+    ! Normal boundary
+
+    use fson_mpi_module
+    use IAPWS_module
+    use eos_we_module
+
+    class(unit_test_type), intent(in out) :: test
+    ! Locals:
+    character(:), allocatable :: json_str
+    type(fson_value), pointer :: json
+    type(mesh_type) :: mesh
+    type(IAPWS_type) :: thermo
+    type(eos_we_type) :: eos
+    PetscInt :: num_bdy, num_bdy_total
+    PetscMPIInt :: rank
+    PetscErrorCode :: ierr, err
+    PetscReal, parameter :: gravity(3) = [0._dp, 0._dp, -9.8_dp]
+    PetscInt, parameter :: expected_num_bdy = 49
+
+    call MPI_COMM_RANK(PETSC_COMM_WORLD, rank, ierr)
+
+    json_str = &
+         '{"mesh": {"filename": "' // trim(adjustl(data_path)) // 'mesh/7x7grid.exo"},' // &
+         '"boundaries": [{"primary": [1.e5, 20], "faces": {"normal": [0, 0, 1]}}]}'
+
+      json => fson_parse_mpi(str = json_str)
+      call thermo%init()
+      call eos%init(json, thermo)
+      call mesh%init(eos, json)
+      call mesh%configure(gravity, json, err = err)
+      call mesh%construct_ghost_cells(gravity)
+      call fson_destroy_mpi(json)
+      call mesh%destroy_distribution_data()
+
+      call DMGetStratumSize(mesh%dm, open_boundary_label_name, &
+               1, num_bdy, ierr); CHKERRQ(ierr)
+      call MPI_reduce(num_bdy, num_bdy_total, 1, &
+           MPI_INTEGER, MPI_SUM, 0, PETSC_COMM_WORLD, ierr)
+      if (rank == 0) then
+         call test%assert(expected_num_bdy, num_bdy_total, "total")
+      end if
+      
+      call mesh%destroy()
+      call eos%destroy()
+      call thermo%destroy()
+
+  end subroutine test_normal_boundary
 
 !------------------------------------------------------------------------
 
