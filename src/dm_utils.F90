@@ -163,7 +163,8 @@ contains
     PetscInt, intent(out) :: depth
     type(dm_stratum_type), allocatable, intent(out) :: strata(:)
     ! Locals:
-    PetscErrorCode :: ierr, h
+    PetscInt :: h, dummy, end_interior_cell
+    PetscErrorCode :: ierr
 
     call DMPlexGetDepth(dm, depth, ierr); CHKERRQ(ierr)
     allocate(strata(0: depth))
@@ -171,16 +172,14 @@ contains
     do h = 0, depth
        call DMPlexGetHeightStratum(dm, h, strata(h)%start, &
             strata(h)%end, ierr); CHKERRQ(ierr)
+       strata(h)%end_interior = strata(h)%end
     end do
 
-    call DMPlexGetHybridBounds(dm, strata(0)%end_interior, &
-         strata(1)%end_interior, strata(depth - 1)%end_interior, &
-         strata(depth)%end_interior, ierr); CHKERRQ(ierr)
-    do h = 0, depth
-       if (strata(h)%end_interior < 0) then
-          strata(h)%end_interior = strata(h)%end
-       end if
-    end do
+    call DMPlexGetGhostCellStratum(dm, end_interior_cell, &
+         dummy, ierr); CHKERRQ(ierr)
+    if (end_interior_cell >= 0) then
+       strata(0)%end_interior = end_interior_cell
+    end if
 
   end subroutine dm_get_strata
 
@@ -710,7 +709,7 @@ contains
        result(end_interior_cell)
     !! Returns index (+1) of last interior (i.e. non-boundary) cell of
     !! the DM. In the serial case the result from
-    !! DMPlexGetHybridBounds() is -1, so here this is corrected to
+    !! DMPlexGetGhostCellStratum() is -1, so here this is corrected to
     !! end_cell.
 
     DM, intent(in) :: dm
@@ -719,8 +718,8 @@ contains
     PetscInt :: dummy
     PetscErrorCode :: ierr
 
-    call DMPlexGetHybridBounds(dm, end_interior_cell, dummy, &
-         dummy, dummy, ierr); CHKERRQ(ierr)
+    call DMPlexGetGhostCellStratum(dm, end_interior_cell, dummy, ierr)
+    CHKERRQ(ierr)
     if (end_interior_cell < 0) end_interior_cell = end_cell
 
   end function dm_get_end_interior_cell
