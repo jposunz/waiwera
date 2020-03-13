@@ -6,6 +6,7 @@ build_tools:
   - valgrind
   - make
   - cmake
+  - automake
 
 ninja:
   - ninja-build
@@ -32,6 +33,7 @@ openmpi:
 petsc_dependencies:
   - bison
   - flex
+  - zlib1g-dev
 
 pip_install:
   - python3-pip
@@ -51,7 +53,6 @@ petsc_options:
   - download-chaco
   - download-zlib
   - download-hdf5
-  - with-zlib
   - with-debugging=0
 
 petsc_variables:
