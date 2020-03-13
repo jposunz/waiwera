@@ -6,6 +6,9 @@ import argparse
 import os
 import sys
 
+import matplotlib
+matplotlib.use('Agg')
+
 from credo.systest import SciBenchmarkTest
 from credo.systest import FieldWithinTolTC
 from credo.systest import HistoryWithinTolTC
@@ -25,10 +28,12 @@ import numpy as np
 from docutils.core import publish_file
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-np", help = "number of processes")
+parser.add_argument("-np", type = int, default = 1, help = "number of processes")
+parser.add_argument("-d", "--docker", action = "store_true",
+                    help = "run via Docker (waiwera-dkr)")
 args = parser.parse_args()
-if args.np: num_procs = int(args.np)
-else: num_procs = 1
+mpi = args.np > 1 and not args.docker
+simulator = 'waiwera-dkr -np %d' % args.np if args.docker else 'waiwera'
 
 model_name = 'problem4'
 
@@ -54,18 +59,18 @@ digitised_test_fields = {550: ["Pressure"],
 test_source_fields = ["Enthalpy"]
 
 geo = mulgrid(t2geo_filename)
-map_out_atm = range(geo.num_atmosphere_blocks, geo.num_blocks)
+map_out_atm = list(range(geo.num_atmosphere_blocks, geo.num_blocks))
 
-problem4_test = SciBenchmarkTest(model_name + "_test", nproc = num_procs)
+problem4_test = SciBenchmarkTest(model_name + "_test", nproc = args.np)
 problem4_test.description = """Model Intercomparison Study problem 4"""
 
 run_base_name = model_name
 run_filename = run_base_name + '.json'
 model_run = WaiweraModelRun(run_name, run_filename,
                           fieldname_map = WAIWERA_FIELDMAP,
-                          simulator = 'waiwera',
+                          simulator = simulator,
                           basePath = os.path.realpath(model_dir))
-model_run.jobParams['nproc'] = num_procs
+model_run.jobParams['nproc'] = args.np
 problem4_test.mSuite.addRun(model_run, run_name)
 
 problem4_test.setupEmptyTestCompsList()
@@ -131,7 +136,7 @@ problem4_test.addTestComp(run_index, ref_sim + " source",
                                              testSourceIndex = source_index,
                                              orthogonalError = True))
 
-jrunner = SimpleJobRunner(mpi = True)
+jrunner = SimpleJobRunner(mpi = mpi)
 testResult, mResults = problem4_test.runTest(jrunner, createReports = True)
 
 # plots:

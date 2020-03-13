@@ -6,6 +6,9 @@ import argparse
 import os
 import sys
 
+import matplotlib
+matplotlib.use('Agg')
+
 from credo.systest import SciBenchmarkTest
 
 from credo.jobrunner import SimpleJobRunner
@@ -29,10 +32,12 @@ import numpy as np
 from docutils.core import publish_file
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-np", help = "number of processes")
+parser.add_argument("-np", type = int, default = 1, help = "number of processes")
+parser.add_argument("-d", "--docker", action = "store_true",
+                    help = "run via Docker (waiwera-dkr)")
 args = parser.parse_args()
-if args.np: num_procs = int(args.np)
-else: num_procs = 1
+mpi = args.np > 1 and not args.docker
+simulator = 'waiwera-dkr -np %d' % args.np if args.docker else 'waiwera'
 
 model_name = 'infiltration'
 
@@ -50,7 +55,7 @@ model_dir = './run'
 data_dir = './data'
 t2geo_filename = os.path.join(model_dir, 'g' + model_name + '.dat')
 geo = mulgrid(t2geo_filename)
-map_out_bdy = range(0, geo.num_blocks)
+map_out_bdy = list(range(0, geo.num_blocks))
 
 run_index = 0
 run_name = 'run'
@@ -61,16 +66,16 @@ test_fields = ['Liquid saturation']
 digitised_test_fields = test_fields
 digitised_simulators = ["semi-analytical"]
 
-infiltration_test = SciBenchmarkTest(model_name + "_test", nproc = num_procs)
+infiltration_test = SciBenchmarkTest(model_name + "_test", nproc = args.np)
 infiltration_test.description = """1-D horizontal infiltration test from TOUGH User Guide
 """
 
 run_filename = run_base_name + '.json'
 model_run = WaiweraModelRun(run_name, run_filename,
                             fieldname_map = WAIWERA_FIELDMAP,
-                            simulator = 'waiwera',
+                            simulator = simulator,
                             basePath = os.path.realpath(model_dir))
-model_run.jobParams['nproc'] = num_procs
+model_run.jobParams['nproc'] = args.np
 infiltration_test.mSuite.addRun(model_run, run_name)
 
 infiltration_test.setupEmptyTestCompsList()
@@ -109,7 +114,7 @@ for sim in digitised_simulators:
                                           maxCoordinate = xmax,
                                           testOutputIndex = output_index))
 
-jrunner = SimpleJobRunner(mpi = True)
+jrunner = SimpleJobRunner(mpi = mpi)
 testResult, mResults = infiltration_test.runTest(jrunner, createReports = True)
 
 result = infiltration_test.mSuite.resultsList[run_index]

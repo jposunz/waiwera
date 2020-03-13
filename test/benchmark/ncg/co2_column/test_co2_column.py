@@ -6,6 +6,9 @@ import argparse
 import os
 import sys
 
+import matplotlib
+matplotlib.use('Agg')
+
 from credo.systest import SciBenchmarkTest
 
 from credo.jobrunner import SimpleJobRunner
@@ -29,10 +32,12 @@ import numpy as np
 from docutils.core import publish_file
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-np", help = "number of processes")
+parser.add_argument("-np", type = int, default = 1, help = "number of processes")
+parser.add_argument("-d", "--docker", action = "store_true",
+                    help = "run via Docker (waiwera-dkr)")
 args = parser.parse_args()
-if args.np: num_procs = int(args.np)
-else: num_procs = 1
+mpi = args.np > 1 and not args.docker
+simulator = 'waiwera-dkr -np %d' % args.np if args.docker else 'waiwera'
 
 def total_CO2_mass_fraction(mResult, index):
     """Returns total CO2 mass fraction across all phases, from Waiwera
@@ -63,7 +68,7 @@ model_dir = './run'
 data_dir = './data'
 t2geo_filename = os.path.join(model_dir, 'g' + model_name + '.dat')
 geo = mulgrid(t2geo_filename)
-map_out_atm = range(geo.num_atmosphere_blocks, geo.num_blocks)
+map_out_atm = list(range(geo.num_atmosphere_blocks, geo.num_blocks))
 
 CO2_mass_fractions = [0, 0.1, 1, 5] # percent
 run_names = [str(xgp) for xgp in CO2_mass_fractions]
@@ -80,7 +85,7 @@ digitised_test_fields = {'CO2 partial pressure'}
 digitised_simulators = ['MULKOM']
 digitised_run_names = ['0.1', '1', '5']
 
-co2_column_test = SciBenchmarkTest(model_name + "_test", nproc = num_procs)
+co2_column_test = SciBenchmarkTest(model_name + "_test", nproc = args.np)
 co2_column_test.description = """Vertical column CO2 test from O'Sullivan et al. (1985). The original
 problem (figs 10 and 11) specified CO2 input in terms of partial pressure, though the text indicated
 that mass fraction (%) may actually have been used. Here, CO2 input is in terms of mass fraction. The
@@ -93,9 +98,9 @@ for run_index, run_name in enumerate(run_names):
     run_filename = run_base_name + '.json'
     model_run = WaiweraModelRun(run_name, run_filename,
                                 fieldname_map = WAIWERA_FIELDMAP,
-                                simulator = 'waiwera',
+                                simulator = simulator,
                                 basePath = os.path.realpath(model_dir))
-    model_run.jobParams['nproc'] = num_procs
+    model_run.jobParams['nproc'] = args.np
     co2_column_test.mSuite.addRun(model_run, run_name)
 
 co2_column_test.setupEmptyTestCompsList()
@@ -103,7 +108,6 @@ co2_column_test.setupEmptyTestCompsList()
 digitised_test_fields = ['CO2 partial pressure']
 digitised_simulators = ['MULKOM']
 digitised_result = {}
-map_out_bdy = range(0, geo.num_blocks)
 AUTOUGH2_result = {}
 
 for run_index, run_name in enumerate(run_names):
@@ -137,7 +141,7 @@ for run_index, run_name in enumerate(run_names):
                                               coordinateIndex = 1,
                                               testOutputIndex = -1))
 
-jrunner = SimpleJobRunner(mpi = True)
+jrunner = SimpleJobRunner(mpi = mpi)
 testResult, mResults = co2_column_test.runTest(jrunner, createReports = True)
 
 z = [lay.centre for lay in geo.layerlist[1:]]

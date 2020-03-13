@@ -6,6 +6,9 @@ import argparse
 import os
 import sys
 
+import matplotlib
+matplotlib.use('Agg')
+
 from credo.systest import SciBenchmarkTest
 
 from credo.jobrunner import SimpleJobRunner
@@ -28,10 +31,12 @@ import json
 from docutils.core import publish_file
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-np", help = "number of processes")
+parser.add_argument("-np", type = int, default = 1, help = "number of processes")
+parser.add_argument("-d", "--docker", action = "store_true",
+                    help = "run via Docker (waiwera-dkr)")
 args = parser.parse_args()
-if args.np: num_procs = int(args.np)
-else: num_procs = 1
+mpi = args.np > 1 and not args.docker
+simulator = 'waiwera-dkr -np %d' % args.np if args.docker else 'waiwera'
 
 model_name = 'minc_1d'
 
@@ -52,7 +57,7 @@ num_cols = geo.num_columns
 
 def minc_level_map(num_levels):
     # return mapping to reorder AUTOUGH2 cells into MINC levels, as in Waiwera
-    m = range(num_cols)
+    m = list(range(num_cols))
     for l in range(num_levels):
         level_map = list(range(num_cols + l,
                                num_cols + l + num_levels * num_cols,
@@ -68,7 +73,7 @@ plot_fields = test_fields
 field_scale = {'Pressure': 1.e5, 'Temperature': 1., 'Vapour saturation': 1.}
 field_unit = {'Pressure': 'bar', 'Temperature': '$^{\circ}$C', 'Vapour saturation': ''}
 
-minc_1d_test = SciBenchmarkTest(model_name + "_test", nproc = num_procs)
+minc_1d_test = SciBenchmarkTest(model_name + "_test", nproc = args.np)
 minc_1d_test.description = """1-D MINC doublet problem
 """
 
@@ -78,9 +83,9 @@ for run_index, run_name in enumerate(run_names):
     run_filename = run_base_name + '.json'
     model_run = WaiweraModelRun(run_name, run_filename,
                                 fieldname_map = WAIWERA_FIELDMAP,
-                                simulator = 'waiwera',
+                                simulator = simulator,
                                 basePath = base_path)
-    model_run.jobParams['nproc'] = num_procs
+    model_run.jobParams['nproc'] = args.np
     minc_1d_test.mSuite.addRun(model_run, run_name)
 
 minc_1d_test.setupEmptyTestCompsList()
@@ -90,7 +95,7 @@ for run_index, run_name in enumerate(run_names):
     run_base_name = model_name + '_' + run_name
     results_filename = os.path.join(model_dir, run_base_name + ".listing")
     run_filename = run_base_name + '.json'
-    inp = json.load(file(os.path.join(base_path, run_filename)))
+    inp = json.load(open(os.path.join(base_path, run_filename)))
     if 'minc' in inp['mesh']:
         num_levels = len(inp['mesh']['minc']['geometry']['matrix']['volume'])
     else: num_levels = 0
@@ -104,7 +109,7 @@ for run_index, run_name in enumerate(run_names):
                                        expected = AUTOUGH2_result[run_name],
                                        testOutputIndex = -1))
 
-jrunner = SimpleJobRunner(mpi = True)
+jrunner = SimpleJobRunner(mpi = mpi)
 testResult, mResults = minc_1d_test.runTest(jrunner, createReports = True)
 
 x = [col.centre[0] for col in geo.columnlist]

@@ -6,6 +6,9 @@ import argparse
 import os
 import sys
 
+import matplotlib
+matplotlib.use('Agg')
+
 from credo.systest import SciBenchmarkTest
 
 from credo.jobrunner import SimpleJobRunner
@@ -28,10 +31,12 @@ import numpy as np
 from docutils.core import publish_file
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-np", help = "number of processes")
+parser.add_argument("-np", type = int, default = 1, help = "number of processes")
+parser.add_argument("-d", "--docker", action = "store_true",
+                    help = "run via Docker (waiwera-dkr)")
 args = parser.parse_args()
-if args.np: num_procs = int(args.np)
-else: num_procs = 1
+mpi = args.np > 1 and not args.docker
+simulator = 'waiwera-dkr -np %d' % args.np if args.docker else 'waiwera'
 
 model_name = 'heat_pipe'
 
@@ -66,9 +71,9 @@ field_unit = {'Pressure': 'bar', 'Temperature': '$^{\circ}$C',
 digitised_test_fields = test_fields
 digitised_simulators = ["TOUGH2"]
 
-map_out_bdy = range(0, geo.num_blocks)
+map_out_bdy = list(range(0, geo.num_blocks))
 
-heat_pipe_test = SciBenchmarkTest(model_name + "_test", nproc = num_procs)
+heat_pipe_test = SciBenchmarkTest(model_name + "_test", nproc = args.np)
 heat_pipe_test.description = """Radial heat pipe problem,
 from the TOUGH2 user guide. (problem 'rhp').
 Here the TOUGH2 results are digitised from the user guide. There is some uncertainty about the
@@ -79,9 +84,9 @@ run_base_name = model_name
 run_filename = run_base_name + '.json'
 model_run = WaiweraModelRun(run_name, run_filename,
                           fieldname_map = WAIWERA_FIELDMAP,
-                          simulator = 'waiwera',
+                          simulator = simulator,
                           basePath = os.path.realpath(model_dir))
-model_run.jobParams['nproc'] = num_procs
+model_run.jobParams['nproc'] = args.np
 heat_pipe_test.mSuite.addRun(model_run, run_name)
 
 heat_pipe_test.setupEmptyTestCompsList()
@@ -120,7 +125,7 @@ for sim in digitised_simulators:
                                       logCoordinate = True,
                                       testOutputIndex = -1))
 
-jrunner = SimpleJobRunner(mpi = True)
+jrunner = SimpleJobRunner(mpi = mpi)
 testResult, mResults = heat_pipe_test.runTest(jrunner, createReports = True)
 
 # plots:

@@ -6,6 +6,9 @@ import argparse
 import os
 import sys
 
+import matplotlib
+matplotlib.use('Agg')
+
 from credo.systest import SciBenchmarkTest
 
 from credo.jobrunner import SimpleJobRunner
@@ -30,10 +33,12 @@ import json
 from docutils.core import publish_file
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-np", help = "number of processes")
+parser.add_argument("-np", type = int, default = 1, help = "number of processes")
+parser.add_argument("-d", "--docker", action = "store_true",
+                    help = "run via Docker (waiwera-dkr)")
 args = parser.parse_args()
-if args.np: num_procs = int(args.np)
-else: num_procs = 1
+mpi = args.np > 1 and not args.docker
+simulator = 'waiwera-dkr -np %d' % args.np if args.docker else 'waiwera'
 
 model_name = 'minc_column'
 
@@ -53,7 +58,7 @@ geo = mulgrid(t2geo_filename)
 
 def minc_level_map(num_levels, num_minc_cells):
     # return mapping to reorder AUTOUGH2 cells into MINC levels, as in Waiwera
-    m = range(geo.num_atmosphere_blocks, geo.num_blocks)
+    m = list(range(geo.num_atmosphere_blocks, geo.num_blocks))
     for l in range(num_levels):
         level_map = list(range(geo.num_blocks + l,
                                geo.num_blocks + l + num_minc_cells,
@@ -70,7 +75,7 @@ field_scale = {'Pressure': 1.e5, 'Temperature': 1., 'Vapour saturation': 1., 'En
 field_unit = {'Pressure': 'bar', 'Temperature': '$^{\circ}$C', 'Vapour saturation': '',
               'Enthalpy': 'kJ/kg'}
 
-minc_column_test = SciBenchmarkTest(model_name + "_test", nproc = num_procs)
+minc_column_test = SciBenchmarkTest(model_name + "_test", nproc = args.np)
 minc_column_test.description = """1-D MINC column problem, production run starting
 from steady-state solution, with single-porosity results included for comparison.
 """
@@ -81,9 +86,9 @@ for run_index, run_name in enumerate(run_names):
     run_filename = run_base_name + '.json'
     model_run = WaiweraModelRun(run_name, run_filename,
                                 fieldname_map = WAIWERA_FIELDMAP,
-                                simulator = 'waiwera',
+                                simulator = simulator,
                                 basePath = base_path)
-    model_run.jobParams['nproc'] = num_procs
+    model_run.jobParams['nproc'] = args.np
     minc_column_test.mSuite.addRun(model_run, run_name)
 
 obs_cell_elev = -350.
@@ -99,7 +104,7 @@ for run_index, run_name in enumerate(run_names):
     run_base_name = model_name + '_' + run_name
     results_filename = os.path.join(model_dir, run_base_name + ".listing")
     run_filename = run_base_name + '.json'
-    inp = json.load(file(os.path.join(base_path, run_filename)))
+    inp = json.load(open(os.path.join(base_path, run_filename)))
     if 'minc' in inp['mesh']:
         num_levels = len(inp['mesh']['minc']['geometry']['matrix']['volume'])
     else: num_levels = 0
@@ -129,7 +134,7 @@ for run_index, run_name in enumerate(run_names):
                                              expected = AUTOUGH2_result[run_name],
                                              testSourceIndex = source_index))
 
-jrunner = SimpleJobRunner(mpi = True)
+jrunner = SimpleJobRunner(mpi = mpi)
 testResult, mResults = minc_column_test.runTest(jrunner, createReports = True)
 
 day = 24. * 60. * 60.
