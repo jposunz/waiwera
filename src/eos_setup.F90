@@ -47,6 +47,9 @@ contains
     use eos_we_module
     use eos_wce_module
     use eos_wae_module
+    use eos_wate_module
+    use eos_wa4te_module
+    use eos_wa5te_module
 
     type(fson_value), pointer, intent(in) :: json
     class(thermodynamics_type), intent(in) :: thermo
@@ -78,6 +81,12 @@ contains
        allocate(eos_wce_type :: eos)
     case ("wae")
        allocate(eos_wae_type :: eos)
+    case ("wate")
+       allocate(eos_wate_type :: eos)
+    case ("wa4te")
+       allocate(eos_wa4te_type :: eos)
+    case ("wa5te")
+       allocate(eos_wa5te_type :: eos)
     case default
        allocate(eos_we_type :: eos)
     end select

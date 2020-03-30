@@ -22,10 +22,16 @@ waiwera_sources = [
   'src/eos.F90',
   'src/eos_setup.F90',
   'src/eos_wae.F90',
+  'src/eos_wate.F90',
+  'src/eos_wa4te.F90',
+  'src/eos_wa5te.F90',
   'src/eos_wce.F90',
   'src/eos_we.F90',
   'src/eos_w.F90',
   'src/eos_wge.F90',
+  'src/eos_wgte.F90',
+  'src/eos_wg4te.F90',
+  'src/eos_wg5te.F90',
   'src/face.F90',
   'src/flow_simulation.F90',
   'src/fluid.F90',
@@ -73,7 +79,8 @@ if meson.get_compiler('fortran').get_id() == 'gcc'
             '-Wno-unused-dummy-argument',
             '-Wno-unused-function',
             '-Wno-return-type',
-            '-Wno-maybe-uninitialized']
+            '-Wno-maybe-uninitialized'
+	    ]
   if not get_option('buildtype').startswith('release')
     f_args += ['-fcheck=all']
   endif
